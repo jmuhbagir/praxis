@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nifi-headless
+  labels:
+    app: nifi
+spec:
+  ports:
+  - port: 8080
+    name: http
+  - port: 8081
+    name: nifi-listen-http
+  - port: 2881
+    name: nifi-site-protocol
+  - port: 2882
+    name: nifi-node-protocol
+  clusterIP: None
+  selector:
+    app: nifi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nifi
+spec:
+  selector:
+    matchLabels:
+      app: nifi
+      tier: backend
+      track: stable
+  serviceName: nifi-headless
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nifi
+        tier: backend
+        track: stable
+    spec:
+      containers:
+        - name: nifi
+          image: gcr.io/fit-authority-236304/nifi
+          env:
+            - name: NIFI_CLUSTER_IS_NODE
+              value: "true"
+            - name: NIFI_CLUSTER_NODE_PROTOCOL_PORT
+              value: "2882"
+            - name: NIFI_ZK_CONNECT_STRING
+              value: zookeeper.thingsboard:2181
+            - name: KUBERNETES_HEADLESS_SERVICE_NAME
+              value: nifi-headless
+          ports:
+            - containerPort: 8080
+            - containerPort: 8081
+            - containerPort: 8443
+            - containerPort: 2882
+          volumeMounts:
+            - name: nifi-data
+              mountPath: /opt/nifi/nifi-current/conf
+              subPath: conf
+            - name: nifi-data
+              mountPath: /opt/nifi/nifi-current/logs
+              subPath: logs
+            - name: nifi-data
+              mountPath: /opt/nifi/nifi-current/database_repository
+              subPath: database_repository
+            - name: nifi-data
+              mountPath: /opt/nifi/nifi-current/flowfile_repository
+              subPath: flowfile_repository
+            - name: nifi-data
+              mountPath: /opt/nifi/nifi-current/content_repository
+              subPath: content_repository
+            - name: nifi-data
+              mountPath: /opt/nifi/nifi-current/provenance_repository
+              subPath: provenance_repository
+            - name: nifi-data
+              mountPath: /opt/nifi/nifi-current/state
+              subPath: state
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+  volumeClaimTemplates:
+  - metadata:
+      name: nifi-data
+      annotations:
+        volume.beta.kubernetes.io/storage-class: fast
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+
